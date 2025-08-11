@@ -13,3 +13,4 @@ easyocr
 gspread
 oauth2client
 utils
+cv2
