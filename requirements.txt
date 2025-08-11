@@ -1,0 +1,15 @@
+streamlit
+requests
+pandas
+numpy
+matplotlib
+scikit-learn
+fastapi
+uvicorn
+opencv-python
+torch
+ultralytics
+easyocr
+gspread
+oauth2client
+utils
