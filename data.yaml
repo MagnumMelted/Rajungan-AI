@@ -1,0 +1,15 @@
+# data.yaml
+train: ./datasets/images/train
+val: ./datasets/images/val
+test: ./datasets/images/test
+
+# Jumlah total kelas
+nc: 4 
+
+# Nama kelas sesuai urutan ID di skrip konversi
+names: [
+  'carapace',
+  'ventral_view',
+  'weight',
+  'ruler'
+  ]
