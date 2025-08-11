@@ -1,85 +1,65 @@
 import streamlit as st
 import cv2
-import tempfile
-import openpyxl
-import os
+import av
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 from detection import init_models, process_frame, export_to_excel
 
-# Set judul halaman
 st.set_page_config(page_title="Deteksi Rajungan", layout="wide")
 st.title("📷 Deteksi Panjang, Lebar, & Berat Rajungan")
 
-# Inisialisasi model saat pertama kali
+# Inisialisasi model sekali saja
 if "models_initialized" not in st.session_state:
     with st.spinner("Memuat model YOLO & EasyOCR..."):
         init_models()
     st.session_state["models_initialized"] = True
 
-# Tempat untuk video
-video_placeholder = st.empty()
-
-# Placeholder untuk info berat, lebar, panjang agar tidak menumpuk
+# Placeholder untuk info berat, lebar, panjang
 info_placeholder = st.empty()
 
-# Variabel simpan frame terakhir untuk snapshot
-if "last_frame" not in st.session_state:
-    st.session_state["last_frame"] = None
+# Kelas VideoProcessor untuk memproses frame video
+class RajunganVideoProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.berat = None
+        self.ukuran = None
+        self.last_frame = None
 
-# Fungsi convert frame OpenCV BGR ke bytes PNG untuk download
-def convert_frame_to_bytes(frame):
-    ret, buf = cv2.imencode('.png', frame)
-    if not ret:
-        return None
-    return buf.tobytes()
+    def recv(self, frame):
+        img = frame.to_ndarray(format="bgr24")
 
-# Tombol kontrol
-col1, col2, col3 = st.columns([1,1,1])
-start_btn = col1.button("▶ Mulai Kamera")
-stop_btn = col2.button("⏹ Hentikan Kamera")
-snapshot_btn = col3.button("📸 Ambil Snapshot")
+        processed_frame, berat, ukuran = process_frame(img)
 
-# Jalankan webcam
-if start_btn:
-    cap = cv2.VideoCapture(0)
-    st.session_state["camera_running"] = True
-    while st.session_state.get("camera_running", False):
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Gagal mengakses kamera!")
-            break
+        self.berat = berat
+        self.ukuran = ukuran
+        self.last_frame = processed_frame.copy() if processed_frame is not None else None
 
-        processed_frame, berat, ukuran = process_frame(frame)
+        return av.VideoFrame.from_ndarray(processed_frame, format="bgr24")
 
-        # Simpan frame terakhir hasil proses ke session_state (BGR)
-        st.session_state["last_frame"] = processed_frame.copy()
+# Jalankan webrtc streamer
+ctx = webrtc_streamer(key="rajungan", video_processor_factory=RajunganVideoProcessor)
 
-        processed_frame_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-        video_placeholder.image(processed_frame_rgb, channels="RGB")
+# Setelah stream aktif, tampilkan info berat, lebar, panjang
+if ctx.video_processor:
+    berat = ctx.video_processor.berat
+    ukuran = ctx.video_processor.ukuran
 
-        if berat is not None and ukuran is not None:
-            info_placeholder.markdown(
-                f"**Berat:** {berat:.1f} gram  \n"
-                f"**Lebar:** {ukuran['lebar_cm']:.2f} cm  \n"
-                f"**Panjang:** {ukuran['panjang_cm']:.2f} cm"
-            )
-        else:
-            info_placeholder.text("Menunggu data deteksi...")
+    if berat is not None and ukuran is not None:
+        info_placeholder.markdown(
+            f"**Berat:** {berat:.1f} gram  \n"
+            f"**Lebar:** {ukuran['lebar_cm']:.2f} cm  \n"
+            f"**Panjang:** {ukuran['panjang_cm']:.2f} cm"
+        )
+    else:
+        info_placeholder.text("Menunggu data deteksi...")
 
-        if stop_btn:
-            st.session_state["camera_running"] = False
-
-    cap.release()
-
-# Tombol snapshot: simpan dan siap diunduh
-if snapshot_btn:
-    frame = st.session_state.get("last_frame", None)
-    if frame is not None:
-        img_bytes = convert_frame_to_bytes(frame)
-        if img_bytes:
+# Tombol snapshot: ambil frame terakhir dan download
+if st.button("📸 Ambil Snapshot"):
+    if ctx.video_processor and ctx.video_processor.last_frame is not None:
+        ret, buf = cv2.imencode('.png', ctx.video_processor.last_frame)
+        if ret:
             st.success("Snapshot berhasil diambil!")
             st.download_button(
                 label="Unduh Snapshot PNG",
-                data=img_bytes,
+                data=buf.tobytes(),
                 file_name="snapshot_terakhir.png",
                 mime="image/png"
             )
