@@ -10,7 +10,10 @@ opencv-python
 torch
 ultralytics
 easyocr
-gspread
+openpyxl
 oauth2client
 utils
 cv2
+tempfile
+os
+sys
