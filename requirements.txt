@@ -12,3 +12,5 @@ ultralytics
 easyocr
 openpyxl
 oauth2client
+streamlit-webrtc
+av
